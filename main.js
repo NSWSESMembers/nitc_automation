@@ -1,28 +1,33 @@
 var Libbeacon = require("libbeacon");
-var crypto = require('crypto');
 var fs = require('fs');
 var serialize = require('node-serialize');
 var qs = require('qs');
 var mysql      = require('mysql');
 var async = require('async');
-var fs = require('fs');
 
 var cachefile = "./hashcache.json"
 
 
-var nitcID = 42945
+//ID of the NITC we want to add members to.
+var nitcID = process.env.BEACON_NITCID
 
 
 var connection = mysql.createConnection({
-  host     : 'tdykes.com',
+  host     : 'localhost',
   user     : process.env.SESLOGIN_USER,
   password : process.env.SESLOGIN_PASS,
   database : process.env.SESLOGIN_DB
 });
 
 function main() {
+  console.log("Running main loop")
+
+
   var beacon = new Libbeacon();
   var cache = [];
+
+  //open the hash file if exists
+  //used to store what ID's have been procesed to avoid dupes
   fs.exists(cachefile, function(fileok){
     if(fileok)fs.readFile(cachefile, function(error, data) {
       console.log(data)
@@ -30,7 +35,6 @@ function main() {
     })
   })
 
-  console.log("Running main loop")
 
   var mysqlResults = []
   var membersInBatch = []
@@ -39,7 +43,7 @@ function main() {
   async.series([
     function getRecordsFromMysql(step) {
       connection.connect();
-            //Parramatta and only training events, limit 100 for safety
+            //Parramatta and only other,training,assess events, which have end times,  limit 100 for safety
             connection.query('SELECT periods.id,periods.starttime,periods.endtime,members.serialnumber FROM periods LEFT JOIN members ON members.id = periods.memberid WHERE periods.locationid = "5" AND periods.categoryid REGEXP \'^(1|6|7|8)\' AND endtime IS NOT NULL ORDER BY periods.id DESC LIMIT 100', function (error, results, fields) {
               if (error) throw error;
               results.forEach(function(res){
@@ -50,8 +54,10 @@ function main() {
                   var enddate = new Date(res.endtime*1000);
                   mysqlResults.push({memberID: memberID, startdate: startdate, enddate: enddate}) //hold these off in an array
                   cache.push(res.id);
+                  console.log("WILL process row #"+res.id)
+
                 } else {
-                  console.log("Not processing already seen row #"+res.id)
+                  console.log("Not processing an already seen row #"+res.id)
                 }
               })
               connection.end();
@@ -60,7 +66,8 @@ function main() {
 },
 
 function getIDFromBeacon(step) {
- beacon.login(process.env.BEACON_USERNAME, process.env.BEACON_PASSWORD, function(err, success) {
+  //login to beacon, and hold the sesison open for later
+  beacon.login(process.env.BEACON_USERNAME, process.env.BEACON_PASSWORD, function(err, success) {
 
    if(err) {
     console.log(err);
@@ -77,9 +84,9 @@ function getIDFromBeacon(step) {
   }
 
 
-  mysqlResults.forEach(function(row){
-   getMemberDbId(row.memberID,function(mid){
-    console.log("Member BID is "+mid)
+  mysqlResults.forEach(function(row){ //walk the mysql results
+   getMemberDbId(row.memberID,function(mid){ //for every returned result from beacon
+    console.log("Member BID is "+mid) //BID is background id (database record id kinda thing)
 
     participant = {}
     participant.Id = 0
@@ -89,7 +96,7 @@ function getIDFromBeacon(step) {
     participant.TypeId = 1
     membersInBatch.push(participant)
 
-    if (membersInBatch.length == mysqlResults.length)
+    if (membersInBatch.length == mysqlResults.length) //shitty way to know when they are all back
     {
       step();
     }
@@ -101,15 +108,17 @@ function getIDFromBeacon(step) {
 function workOnNICT(step) {
   processedBatch = []
 
-        //cleanup ones that came back up for member id's
+        //cleanup ones that came back and didnt find a member ID
         membersInBatch.forEach(function(row){
           if (row.PersonId != null)
           {
             processedBatch.push(row)
           }
         })
-
+        //get the NICT event we want to update
         beacon.get('NonIncident/'+nitcID, {}, function(error, data) {
+
+          //Clone all the info and get it ready to be re-posted
           parentform = {}
           parentform.Id= data.Id
           parentform.TypeId = data.Type.Id
@@ -121,47 +130,51 @@ function workOnNICT(step) {
           })
           parentform.StartDate = data.StartDate
           parentform.EndDate = data.EndDate
+          ///
 
           currentParticipants = data.Participants
 
+          //clone the participants for reposting
           currentParticipants.forEach(function(v){
                 //tidy them up so they can be reposted
                 v.PersonId = v.Person.Id
                 v.TypeId = v.ParticipantType.Id
                 delete(v.Person)
                 delete(v.ParticipantType)
+                //
               })
 
+          //mash the two arrays together (new ones plus ones that are already there)
+          var newNICTMembers = currentParticipants.concat(processedBatch)
 
-//            console.log(currentParticipants)
+          parentform.Participants = newNICTMembers
 
-var newNICTMembers = currentParticipants.concat(processedBatch)
+          console.log(parentform)
 
-parentform.Participants = newNICTMembers
+          //post it all to beacon
+          beacon.get('NonIncident/'+nitcID, {
+            method: 'PUT',
+            form: qs.stringify(parentform)
+          },
+          function(error, data) {
+            if (error) {
+              console.log("NITC Error:"+error)
+            }
+            if (!error) {
+              console.log("NITC Sent without HTTP error. this is good")
+              //write out what we have done into cache
+              fs.writeFileSync(cachefile, JSON.stringify(cache), 'utf-8');
 
-console.log(parentform)
+            }
+          })
 
-
-beacon.get('NonIncident/'+nitcID, {
-  method: 'PUT',
-  form: qs.stringify(parentform)
-},
-function(error, data) {
-  if (error) {
-    console.log("NITC Error:"+error)
-  }
-  if (!error) {
-    console.log("NITC Sent without HTTP error. this is good")
-    fs.writeFileSync(cachefile, JSON.stringify(cache), 'utf-8');
-
-  }
-})
-
-});
+        });
 }
 ])
 
+
 function getMemberDbId(membernumber,cb){
+  //function to take in a member ID and return a database ID
   beacon.get('People/Search?'+"RegistrationNumber="+membernumber, {method: 'GET'}, function(error, data) {
     if (data.Results.length == 1)
     {
