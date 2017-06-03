@@ -1,0 +1,25 @@
+{
+  "name": "nitc_automation",
+  "version": "1.0.0",
+  "description": "Code for automating NITC submission",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/NSWSESMembers/nitc_automation.git"
+  },
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/NSWSESMembers/nitc_automation/issues"
+  },
+  "homepage": "https://github.com/NSWSESMembers/nitc_automation#readme",
+  "dependencies": {
+    "libbeacon": "^0.1.0",
+    "mysql": "^2.13.0",
+    "node-serialize": "0.0.4",
+    "qs": "^6.4.0"
+  }
+}
