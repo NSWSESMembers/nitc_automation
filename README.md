@@ -4,7 +4,7 @@ Code for automating NITC submissions from SES Login in this example.
 I run it with a bash script to get the evn up
 
 
-
+```
 #!/bin/bash
 
 export BEACON_USERNAME=foo
@@ -15,4 +15,8 @@ export SESLOGIN_DB=dbname
 export BEACON_NITCID=123456
 
 node main.js
+```
 
+
+## License
+[MIT](LICENSE)
