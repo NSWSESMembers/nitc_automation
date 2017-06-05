@@ -20,6 +20,7 @@
     "libbeacon": "^0.1.0",
     "mysql": "^2.13.0",
     "node-serialize": "0.0.4",
+    "nodemailer": "^4.0.1",
     "qs": "^6.4.0"
   }
 }
