@@ -2,9 +2,10 @@ var Libbeacon = require("libbeacon");
 var fs = require('fs');
 var serialize = require('node-serialize');
 var qs = require('qs');
-var mysql      = require('mysql');
+var mysql = require('mysql');
 var async = require('async');
 var nodemailer = require('nodemailer');
+var util = require('util')
 
 var cachefile = "./hashcache.json"
 
@@ -23,9 +24,9 @@ var transporter = nodemailer.createTransport({
       });
 
 var mailOptions = {
-  from: 'par.ops@ses.nsw.gov.au',
-  to: 'ttdykes@gmail.com',
-  subject: 'Sending Email using Node.js',
+  from: process.env.EMAIL_USER,
+  to: process.env.EMAIL_TO,
+  subject: 'SESLogin NITC Generator',
   text: ''
 };
 
@@ -36,7 +37,7 @@ var nitcID = process.env.BEACON_NITCID
 
 
 var connection = mysql.createConnection({
-  host     : 'seslogin.com',
+  host     : 'localhost',
   user     : process.env.SESLOGIN_USER,
   password : process.env.SESLOGIN_PASS,
   database : process.env.SESLOGIN_DB
@@ -64,12 +65,18 @@ function main() {
 
   async.series([
     function getRecordsFromMysql(step) {
+      mailOptions.text = mailOptions.text+"\nStarting SQL"
+
       connection.connect();
+      var oneDayAgo = new Date()
+      oneDayAgo.setDate(oneDayAgo.getDate()-90);
+      oneDayAgo.setTime(oneDayAgo.valueOf() - 60000 * oneDayAgo.getTimezoneOffset());
+      var oneDayAgoSeconds = Math.round(oneDayAgo.getTime() / 1000)
+      console.log(oneDayAgoSeconds)
             //Parramatta and only other,training,assess events, which have end times,  limit 100 for safety
-            connection.query('SELECT periods.id,periods.starttime,periods.endtime,periods.categoryid,members.serialnumber,categories.name FROM periods LEFT JOIN members ON members.id = periods.memberid LEFT JOIN categories ON categories.id = periods.categoryid WHERE periods.locationid = "5" AND periods.categoryid REGEXP \'^(1|3|6|7|8)\' AND endtime IS NOT NULL ORDER BY periods.id DESC LIMIT 10', function (error, results, fields) {
+            connection.query('SELECT periods.id,periods.starttime,periods.endtime,periods.categoryid,members.serialnumber,categories.name FROM periods LEFT JOIN members ON members.id = periods.memberid LEFT JOIN categories ON categories.id = periods.categoryid WHERE periods.locationid = "5" AND periods.categoryid REGEXP \'^(1|3|6|7|8)\' AND endtime IS NOT NULL AND endtime > ? ORDER BY periods.id DESC', oneDayAgoSeconds, function (error, results, fields) {
               if (error) throw error;
               results.forEach(function(res){
-                console.log(res)
                 if (cache.indexOf(res.id) == -1) { //not in the cache AKA i have not seen this record before
                   var memberID = res.serialnumber
                   var startdate = new Date(res.starttime*1000);
@@ -78,13 +85,17 @@ function main() {
                   var categoryName = res.name
                   mysqlResults.push({memberID: memberID, startdate: startdate, enddate: enddate,categoryId: categoryId, categoriesname: categoryName}) //hold these off in an array
                   cache.push(res.id);
+                  mailOptions.text = mailOptions.text+"\nWILL process row #"+res.id
                   console.log("WILL process row #"+res.id)
 
                 } else {
-                  console.log("Not processing an already seen row #"+res.id)
+                  mailOptions.text = mailOptions.text+"\nNOT processing an already seen row #"+res.id
+                  console.log("NOT processing an already seen row #"+res.id)
                 }
               })
               connection.end();
+              mailOptions.text = mailOptions.text+"\nFinished SQL"
+
               step();
             })
 },
@@ -131,9 +142,6 @@ function getIDFromBeacon(step) {
     participant.EndDate = row.enddate
 
 
-
-
-
     membersInBatch[row.categoryId]['participants'].push(participant)
   }
   if (rowsprocessed == mysqlResults.length) //shitty way to know when they are all back
@@ -145,6 +153,15 @@ function getIDFromBeacon(step) {
 })
 } else {
   console.log("Not Logging in, no records to process")
+  mailOptions.text=mailOptions.text+"\n\nRun ended at "+new Date().toISOString()+"\n\n"
+
+  transporter.sendMail(mailOptions, function(error, info){
+    if (error) {
+      console.log(error);
+    } else {
+      console.log('Email sent: ' + info.response);
+    }
+  });
   step();
 }
 },
@@ -173,7 +190,7 @@ function workOnNICT(step) {
     602 : [316,317,318], //chainsaw
     603 : [319], //comms
     604 : [322],//Critical Incident Support
-    605 : [314], //RFA Online
+    605 : [314], //Beacon
     606 : [325], //First Aid
     607 : [358],//Floodboat
     608 : [339], //PIARO
@@ -190,6 +207,26 @@ function workOnNICT(step) {
     620 : [353], //DOV
     622 : [349], //Vertical
     622 : [330], //AIMS
+
+    700 : [338], //trainer
+    701 : [349], //VR
+    702 : [316,317,318], //chainsaw
+    703 : [353], //DOV
+    704 : [348, 379, 380], //USAR
+    705 : [327], //Swift
+    706 : [373], //Storm
+    707 : [340], //RCR
+    708 : [369,370], //Nav
+    709 : [339], //PIRO
+    710 : [358], //Floodboat
+    711 : [314], //Beacon
+    712 : [319], //Comms
+    713 : [368], //MTS
+    714 : [328], //Fundamentals
+    715 : [325], //Firstaid
+    716 : [369,370], //Map
+    717 : [330], //AIIMS
+
     /// 338 is Other
 
   };
@@ -356,13 +393,16 @@ function workOnNICT(step) {
               if (numberSubmitted = Object.keys(membersInBatch).length)
               {
                 console.log("All Done")
+                step();
               }
             }
             if (!error) {
               console.log("NITC Sent without HTTP error. this is good")
               console.log(data)
               console.log('NITC EVENT ID IS '+data.Id)
-              mailOptions.text= mailOptions.text+"+++++++++"+data+"+++++++++"
+
+              mailOptions.text= mailOptions.text+"\n\n\nCreated Event #"+data.Id+ "\nName: "+data.Name+"\nDescription: "+data.Description+"\nURL: http://previewbeacon.ses.nsw.gov.au/nitc/"+data.Id+"\n"+util.inspect(data.Participants, false, null)
+
 
              // Close the Event
              beacon.get('NonIncident/'+data.Id+'/completed?completed=true', {
@@ -376,33 +416,36 @@ function workOnNICT(step) {
               console.log("NITC Closed without HTTP error. this is good")
               numberSubmitted++
 
-              if (numberSubmitted = Object.keys(membersInBatch).length)
+              if (numberSubmitted == Object.keys(membersInBatch).length)
               {
                 console.log("All Done")
+                step();
               }
 
             }
 
           })
-
-              //write out what we have done into cache
-              fs.writeFileSync(cachefile, JSON.stringify(cache), 'utf-8');
-
-            }
-          })
+           }
+         })
 
 }
+},
+function finishUp(step) {
+ //write out what we have done into cache
+ fs.writeFileSync(cachefile, JSON.stringify(cache), 'utf-8');
+ mailOptions.text=mailOptions.text+"\n\nRun ended at "+new Date().toISOString()+"\n\n"
+
+ transporter.sendMail(mailOptions, function(error, info){
+  if (error) {
+    console.log(error);
+  } else {
+    console.log('Email sent: ' + info.response);
+  }
+});
 }
 ])
 
 
-// transporter.sendMail(mailOptions, function(error, info){
-//   if (error) {
-//     console.log(error);
-//   } else {
-//     console.log('Email sent: ' + info.response);
-//   }
-// });
 
 
 

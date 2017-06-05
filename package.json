@@ -17,6 +17,7 @@
   },
   "homepage": "https://github.com/NSWSESMembers/nitc_automation#readme",
   "dependencies": {
+    "async": "^2.4.1",
     "libbeacon": "^0.1.0",
     "mysql": "^2.13.0",
     "node-serialize": "0.0.4",
