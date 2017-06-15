@@ -30,7 +30,7 @@ var mailOptions = {
   text: ''
 };
 
-mailOptions.text="Run started at "+new Date().toISOString()+"\n\n"
+mailOptions.text="Run started at "+new Date().toISOString()+"\n"
 
 //ID of the NITC we want to add members to.
 var nitcID = process.env.BEACON_NITCID
@@ -69,7 +69,7 @@ function main() {
 
       connection.connect();
       var oneDayAgo = new Date()
-      oneDayAgo.setDate(oneDayAgo.getDate()-90);
+      oneDayAgo.setDate(oneDayAgo.getDate()-1);
       oneDayAgo.setTime(oneDayAgo.valueOf() - 60000 * oneDayAgo.getTimezoneOffset());
       var oneDayAgoSeconds = Math.round(oneDayAgo.getTime() / 1000)
       console.log(oneDayAgoSeconds)
@@ -86,10 +86,10 @@ function main() {
                   mysqlResults.push({memberID: memberID, startdate: startdate, enddate: enddate,categoryId: categoryId, categoriesname: categoryName}) //hold these off in an array
                   cache.push(res.id);
                   mailOptions.text = mailOptions.text+"\nWILL process row #"+res.id
-                  console.log("WILL process row #"+res.id)
+                  console.log("WILL process DB row #"+res.id)
 
                 } else {
-                  mailOptions.text = mailOptions.text+"\nNOT processing an already seen row #"+res.id
+//                  mailOptions.text = mailOptions.text+"\nNOT processing an already seen row #"+res.id
                   console.log("NOT processing an already seen row #"+res.id)
                 }
               })
@@ -153,7 +153,7 @@ function getIDFromBeacon(step) {
 })
 } else {
   console.log("Not Logging in, no records to process")
-  mailOptions.text=mailOptions.text+"\n\nRun ended at "+new Date().toISOString()+"\n\n"
+  mailOptions.text=mailOptions.text+"\nNo records to process.\n\nRun ended at "+new Date().toISOString()+"\n\n"
 
   transporter.sendMail(mailOptions, function(error, info){
     if (error) {
@@ -364,7 +364,7 @@ function workOnNICT(step) {
 
     parentform = {}
     parentform.TypeId = membersInBatch[category]['type']
-    parentform.Name = "SESLOGIN Auto - "+membersInBatch[category]['categoryName']
+    parentform.Name = "SESLOGIN - "+membersInBatch[category]['categoryName']
     parentform.Description = membersInBatch[category]['categoryName']
     parentform.TagIds = membersInBatch[category]['tags']
 
@@ -401,7 +401,7 @@ function workOnNICT(step) {
               console.log(data)
               console.log('NITC EVENT ID IS '+data.Id)
 
-              mailOptions.text= mailOptions.text+"\n\n\nCreated Event #"+data.Id+ "\nName: "+data.Name+"\nDescription: "+data.Description+"\nURL: http://previewbeacon.ses.nsw.gov.au/nitc/"+data.Id+"\n"+util.inspect(data.Participants, false, null)
+              mailOptions.text= mailOptions.text+"\n\n\nCreated Event #"+data.Id+ "\nName: "+data.Name+"\nDescription: "+data.Description+"\nURL: http://beacon.ses.nsw.gov.au/nitc/"+data.Id+"\n"+util.inspect(data.Participants, false, null)
 
 
              // Close the Event
