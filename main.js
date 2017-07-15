@@ -7,7 +7,7 @@ var async = require('async');
 var nodemailer = require('nodemailer');
 var util = require('util')
 
-var cachefile = "./hashcache.json"
+var cachefile = "./hashcache_"+process.env.SESLOGIN_HQID+".json"
 
 
 var transporter = nodemailer.createTransport({
@@ -47,6 +47,8 @@ function main() {
   console.log("Running main loop")
 
   var beacon = new Libbeacon();
+  beacon.baseUrl = "https://trainbeacon.ses.nsw.gov.au/";
+
   var cache = [];
 
   //open the hash file if exists
@@ -69,13 +71,14 @@ function main() {
 
       connection.connect();
       var oneDayAgo = new Date()
-      oneDayAgo.setDate(oneDayAgo.getDate()-1);
+      oneDayAgo.setDate(oneDayAgo.getDate()-5);
       oneDayAgo.setTime(oneDayAgo.valueOf() - 60000 * oneDayAgo.getTimezoneOffset());
       var oneDayAgoSeconds = Math.round(oneDayAgo.getTime() / 1000)
-      console.log(oneDayAgoSeconds)
             //Parramatta and only other,training,assess events, which have end times,  limit 100 for safety
-            connection.query('SELECT periods.id,periods.starttime,periods.endtime,periods.categoryid,members.serialnumber,categories.name FROM periods LEFT JOIN members ON members.id = periods.memberid LEFT JOIN categories ON categories.id = periods.categoryid WHERE periods.locationid = "5" AND periods.categoryid REGEXP \'^(1|3|6|7|8)\' AND endtime IS NOT NULL AND endtime > ? ORDER BY periods.id DESC', oneDayAgoSeconds, function (error, results, fields) {
+            var query = connection.query('SELECT periods.id,periods.starttime,periods.endtime,periods.categoryid,members.serialnumber,categories.name FROM periods LEFT JOIN members ON members.id = periods.memberid LEFT JOIN categories ON categories.id = periods.categoryid WHERE periods.locationid = ?  AND periods.categoryid REGEXP \'^(1|3|6|7|8)\' AND endtime IS NOT NULL AND endtime > ? ORDER BY periods.id DESC', [process.env.SESLOGIN_HQID, oneDayAgoSeconds], function (error, results, fields) {
+              console.log(query.sql) 
               if (error) throw error;
+              console.log(results)
               results.forEach(function(res){
                 if (cache.indexOf(res.id) == -1) { //not in the cache AKA i have not seen this record before
                   var memberID = res.serialnumber
@@ -89,7 +92,6 @@ function main() {
                   console.log("WILL process DB row #"+res.id)
 
                 } else {
-//                  mailOptions.text = mailOptions.text+"\nNOT processing an already seen row #"+res.id
                   console.log("NOT processing an already seen row #"+res.id)
                 }
               })
@@ -118,9 +120,17 @@ function getIDFromBeacon(step) {
 
     if(success) {
       console.log("Login OK!");
-    }
+    //Set HQ ID
+    console.log("Setting LHQ to "+process.env.BEACON_HQID)
+    beacon.setHQ(process.env.BEACON_HQID, function(result)
+    {
+      console.log(result)
+      if (result)
+      {
+        console.log("LHQ SET")
 
-    var rowsprocessed = 0
+
+        var rowsprocessed = 0
   mysqlResults.forEach(function(row){ //walk the mysql results
    getMemberDbId(row.memberID,function(mid){ //for every returned result from beacon
     rowsprocessed++
@@ -150,9 +160,13 @@ function getIDFromBeacon(step) {
   }
 })
  })
+}
+})
+}
 })
 } else {
   console.log("Not Logging in, no records to process")
+  console.log("Sending Email")
   mailOptions.text=mailOptions.text+"\nNo records to process.\n\nRun ended at "+new Date().toISOString()+"\n\n"
 
   transporter.sendMail(mailOptions, function(error, info){
