@@ -47,7 +47,7 @@ function main() {
   console.log("Running main loop")
 
   var beacon = new Libbeacon();
-  beacon.baseUrl = "https://trainbeacon.ses.nsw.gov.au/";
+  beacon.baseUrl = process.env.BEACON_URL
 
   var cache = [];
 
@@ -71,10 +71,10 @@ function main() {
 
       connection.connect();
       var oneDayAgo = new Date()
-      oneDayAgo.setDate(oneDayAgo.getDate()-5);
+      oneDayAgo.setDate(oneDayAgo.getDate()-2);
       oneDayAgo.setTime(oneDayAgo.valueOf() - 60000 * oneDayAgo.getTimezoneOffset());
       var oneDayAgoSeconds = Math.round(oneDayAgo.getTime() / 1000)
-            //Parramatta and only other,training,assess events, which have end times,  limit 100 for safety
+            //only other,training,assess events, which have end times,  limit 100 for safety
             var query = connection.query('SELECT periods.id,periods.starttime,periods.endtime,periods.categoryid,members.serialnumber,categories.name FROM periods LEFT JOIN members ON members.id = periods.memberid LEFT JOIN categories ON categories.id = periods.categoryid WHERE periods.locationid = ?  AND periods.categoryid REGEXP \'^(1|3|6|7|8)\' AND endtime IS NOT NULL AND endtime > ? ORDER BY periods.id DESC', [process.env.SESLOGIN_HQID, oneDayAgoSeconds], function (error, results, fields) {
               console.log(query.sql) 
               if (error) throw error;
