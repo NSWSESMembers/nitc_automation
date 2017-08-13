@@ -8,7 +8,7 @@ var nodemailer = require('nodemailer');
 var util = require('util')
 
 var cachefile = "./hashcache_"+process.env.SESLOGIN_HQID+".json"
-
+var hqNameFromEvent = process.env.BEACON_HQID
 
 var transporter = nodemailer.createTransport({
   host: 'smtp.office365.com', // Office 365 server
@@ -26,7 +26,7 @@ var transporter = nodemailer.createTransport({
 var mailOptions = {
   from: process.env.EMAIL_USER,
   to: process.env.EMAIL_TO,
-  subject: 'SESLogin NITC Generator',
+  subject: 'SESLogin NITC Generator for '+hqNameFromEvent,
   text: ''
 };
 
@@ -414,7 +414,8 @@ function workOnNICT(step) {
               console.log("NITC Sent without HTTP error. this is good")
               console.log(data)
               console.log('NITC EVENT ID IS '+data.Id)
-
+	      hqNameFromEvent = data.CreatedAt.Name
+	      mailOptions.subject = 'SESLogin NITC Generator for '+hqNameFromEvent
               mailOptions.text= mailOptions.text+"\n\n\nCreated Event #"+data.Id+ "\nName: "+data.Name+"\nDescription: "+data.Description+"\nURL: http://beacon.ses.nsw.gov.au/nitc/"+data.Id+"\n"+util.inspect(data.Participants, false, null)
 
 
