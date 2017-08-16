@@ -7,8 +7,8 @@ var async = require('async');
 var nodemailer = require('nodemailer');
 var util = require('util')
 
-var cachefile = "./hashcache.json"
-
+var cachefile = "./hashcache_"+process.env.SESLOGIN_HQID+".json"
+var hqNameFromEvent = process.env.BEACON_HQID
 
 var transporter = nodemailer.createTransport({
   host: 'smtp.office365.com', // Office 365 server
@@ -26,11 +26,11 @@ var transporter = nodemailer.createTransport({
 var mailOptions = {
   from: process.env.EMAIL_USER,
   to: process.env.EMAIL_TO,
-  subject: 'SESLogin NITC Generator',
+  subject: 'SESLogin NITC Generator for '+hqNameFromEvent,
   text: ''
 };
 
-mailOptions.text="Run started at "+new Date().toISOString()+"\n\n"
+mailOptions.text="Run started at "+new Date().toISOString()+"\n"
 
 //ID of the NITC we want to add members to.
 var nitcID = process.env.BEACON_NITCID
@@ -47,6 +47,8 @@ function main() {
   console.log("Running main loop")
 
   var beacon = new Libbeacon();
+  beacon.baseUrl = process.env.BEACON_URL
+
   var cache = [];
 
   //open the hash file if exists
@@ -69,13 +71,14 @@ function main() {
 
       connection.connect();
       var oneDayAgo = new Date()
-      oneDayAgo.setDate(oneDayAgo.getDate()-90);
+      oneDayAgo.setDate(oneDayAgo.getDate()-2);
       oneDayAgo.setTime(oneDayAgo.valueOf() - 60000 * oneDayAgo.getTimezoneOffset());
       var oneDayAgoSeconds = Math.round(oneDayAgo.getTime() / 1000)
-      console.log(oneDayAgoSeconds)
-            //Parramatta and only other,training,assess events, which have end times,  limit 100 for safety
-            connection.query('SELECT periods.id,periods.starttime,periods.endtime,periods.categoryid,members.serialnumber,categories.name FROM periods LEFT JOIN members ON members.id = periods.memberid LEFT JOIN categories ON categories.id = periods.categoryid WHERE periods.locationid = "5" AND periods.categoryid REGEXP \'^(1|3|6|7|8)\' AND endtime IS NOT NULL AND endtime > ? ORDER BY periods.id DESC', oneDayAgoSeconds, function (error, results, fields) {
+            //only other,training,assess events, which have end times,  limit 100 for safety
+            var query = connection.query('SELECT periods.id,periods.starttime,periods.endtime,periods.categoryid,members.serialnumber,categories.name FROM periods LEFT JOIN members ON members.id = periods.memberid LEFT JOIN categories ON categories.id = periods.categoryid WHERE periods.locationid = ?  AND periods.categoryid REGEXP \'^(1|3|6|7|8)\' AND endtime IS NOT NULL AND endtime > ? ORDER BY periods.id DESC', [process.env.SESLOGIN_HQID, oneDayAgoSeconds], function (error, results, fields) {
+              console.log(query.sql) 
               if (error) throw error;
+              console.log(results)
               results.forEach(function(res){
                 if (cache.indexOf(res.id) == -1) { //not in the cache AKA i have not seen this record before
                   var memberID = res.serialnumber
@@ -86,10 +89,9 @@ function main() {
                   mysqlResults.push({memberID: memberID, startdate: startdate, enddate: enddate,categoryId: categoryId, categoriesname: categoryName}) //hold these off in an array
                   cache.push(res.id);
                   mailOptions.text = mailOptions.text+"\nWILL process row #"+res.id
-                  console.log("WILL process row #"+res.id)
+                  console.log("WILL process DB row #"+res.id)
 
                 } else {
-                  mailOptions.text = mailOptions.text+"\nNOT processing an already seen row #"+res.id
                   console.log("NOT processing an already seen row #"+res.id)
                 }
               })
@@ -118,9 +120,17 @@ function getIDFromBeacon(step) {
 
     if(success) {
       console.log("Login OK!");
-    }
+    //Set HQ ID
+    console.log("Setting LHQ to "+process.env.BEACON_HQID)
+    beacon.setHQ(process.env.BEACON_HQID, function(result)
+    {
+      console.log(result)
+      if (result)
+      {
+        console.log("LHQ SET")
 
-    var rowsprocessed = 0
+
+        var rowsprocessed = 0
   mysqlResults.forEach(function(row){ //walk the mysql results
    getMemberDbId(row.memberID,function(mid){ //for every returned result from beacon
     rowsprocessed++
@@ -150,10 +160,14 @@ function getIDFromBeacon(step) {
   }
 })
  })
+}
+})
+}
 })
 } else {
   console.log("Not Logging in, no records to process")
-  mailOptions.text=mailOptions.text+"\n\nRun ended at "+new Date().toISOString()+"\n\n"
+  console.log("Sending Email")
+  mailOptions.text=mailOptions.text+"\nNo records to process.\n\nRun ended at "+new Date().toISOString()+"\n\n"
 
   transporter.sendMail(mailOptions, function(error, info){
     if (error) {
@@ -364,7 +378,7 @@ function workOnNICT(step) {
 
     parentform = {}
     parentform.TypeId = membersInBatch[category]['type']
-    parentform.Name = "SESLOGIN Auto - "+membersInBatch[category]['categoryName']
+    parentform.Name = "SESLOGIN - "+membersInBatch[category]['categoryName']
     parentform.Description = membersInBatch[category]['categoryName']
     parentform.TagIds = membersInBatch[category]['tags']
 
@@ -400,8 +414,9 @@ function workOnNICT(step) {
               console.log("NITC Sent without HTTP error. this is good")
               console.log(data)
               console.log('NITC EVENT ID IS '+data.Id)
-
-              mailOptions.text= mailOptions.text+"\n\n\nCreated Event #"+data.Id+ "\nName: "+data.Name+"\nDescription: "+data.Description+"\nURL: http://previewbeacon.ses.nsw.gov.au/nitc/"+data.Id+"\n"+util.inspect(data.Participants, false, null)
+	      hqNameFromEvent = data.CreatedAt.Name
+	      mailOptions.subject = 'SESLogin NITC Generator for '+hqNameFromEvent
+              mailOptions.text= mailOptions.text+"\n\n\nCreated Event #"+data.Id+ "\nName: "+data.Name+"\nDescription: "+data.Description+"\nURL: http://beacon.ses.nsw.gov.au/nitc/"+data.Id+"\n"+util.inspect(data.Participants, false, null)
 
 
              // Close the Event
