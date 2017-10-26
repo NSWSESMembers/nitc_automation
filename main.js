@@ -210,7 +210,7 @@ function workOnNICT(step) {
     608 : [339], //PIARO
     609 : [328], //Fundamentals
     610 : [368], // Maint Team Safety
-    611 : [369, 370], //Navigation
+    611 : [369], //Navigation
     612 : [336], //OHS
     613 : [381], //Ops
     614 : [340], //RCR
@@ -230,7 +230,7 @@ function workOnNICT(step) {
     705 : [327], //Swift
     706 : [373], //Storm
     707 : [340], //RCR
-    708 : [369,370], //Nav
+    708 : [369], //Nav
     709 : [339], //PIRO
     710 : [358], //Floodboat
     711 : [314], //Beacon
