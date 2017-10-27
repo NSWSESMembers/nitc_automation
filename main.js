@@ -1,4 +1,4 @@
-var libbeacon = require("../libbeacon/lib/main.js");
+var Libbeacon = require("libbeacon");
 var fs = require('fs');
 var serialize = require('node-serialize');
 var qs = require('qs');
@@ -6,35 +6,6 @@ var mysql = require('mysql');
 var async = require('async');
 var nodemailer = require('nodemailer');
 var util = require('util')
-
-
-if(!process.env.IDENTITY_CLIENT_ID || !process.env.IDENTITY_CLIENT_SECRET) {
-  assert.fail("Must set IDENTITY_CLIENT_ID and IDENTITY_CLIENT_SECRET");
-}
-
-const env = "BEACON_ENV" in process.env ? process.env.BEACON_ENV : 'prod'
-
-const api = libbeacon(
-  process.env.IDENTITY_CLIENT_ID,
-  process.env.IDENTITY_CLIENT_SECRET,
-  env
-);
-
-if(!process.env.BEACON_USERNAME || !process.env.BEACON_PASSWORD) {
-  assert.fail("Must set BEACON_USERNAME and BEACON_PASSWORD");
-}
-
-
-var beacon = {}
-
-const client = api.login(
-  process.env.BEACON_USERNAME,
-  process.env.BEACON_PASSWORD
-).then((client) => {
-beacon = client
-});
-
-
 
 var cachefile = "./hashcache_"+process.env.SESLOGIN_HQID+".json"
 var hqNameFromEvent = process.env.BEACON_HQID
