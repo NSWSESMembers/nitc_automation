@@ -1,4 +1,4 @@
-var Libbeacon = require("libbeacon");
+var libbeacon = require("../libbeacon/lib/main.js");
 var fs = require('fs');
 var serialize = require('node-serialize');
 var qs = require('qs');
@@ -6,6 +6,35 @@ var mysql = require('mysql');
 var async = require('async');
 var nodemailer = require('nodemailer');
 var util = require('util')
+
+
+if(!process.env.IDENTITY_CLIENT_ID || !process.env.IDENTITY_CLIENT_SECRET) {
+  assert.fail("Must set IDENTITY_CLIENT_ID and IDENTITY_CLIENT_SECRET");
+}
+
+const env = "BEACON_ENV" in process.env ? process.env.BEACON_ENV : 'prod'
+
+const api = libbeacon(
+  process.env.IDENTITY_CLIENT_ID,
+  process.env.IDENTITY_CLIENT_SECRET,
+  env
+);
+
+if(!process.env.BEACON_USERNAME || !process.env.BEACON_PASSWORD) {
+  assert.fail("Must set BEACON_USERNAME and BEACON_PASSWORD");
+}
+
+
+var beacon = {}
+
+const client = api.login(
+  process.env.BEACON_USERNAME,
+  process.env.BEACON_PASSWORD
+).then((client) => {
+beacon = client
+});
+
+
 
 var cachefile = "./hashcache_"+process.env.SESLOGIN_HQID+".json"
 var hqNameFromEvent = process.env.BEACON_HQID
@@ -76,7 +105,7 @@ function main() {
       var oneDayAgoSeconds = Math.round(oneDayAgo.getTime() / 1000)
             //only other,training,assess events, which have end times,  limit 100 for safety
             var query = connection.query('SELECT periods.id,periods.starttime,periods.endtime,periods.categoryid,members.serialnumber,categories.name FROM periods LEFT JOIN members ON members.id = periods.memberid LEFT JOIN categories ON categories.id = periods.categoryid WHERE periods.locationid = ?  AND periods.categoryid REGEXP \'^(1|3|6|7|8)\' AND endtime IS NOT NULL AND endtime > ? ORDER BY periods.id DESC', [process.env.SESLOGIN_HQID, oneDayAgoSeconds], function (error, results, fields) {
-              console.log(query.sql) 
+              console.log(query.sql)
               if (error) throw error;
               console.log(results)
               results.forEach(function(res){
@@ -326,7 +355,7 @@ function workOnNICT(step) {
         membersInBatch[category]['type'] = 3 //Other Other
         break
         case '5': //Support *WONT SEE THIS DUE TO SQL SELECT*
-        membersInBatch[category]['type'] = 3 //Other Other        
+        membersInBatch[category]['type'] = 3 //Other Other
         break
         case '6': //Training
         membersInBatch[category]['type'] = 1 //Training Other
@@ -360,7 +389,7 @@ function workOnNICT(step) {
         membersInBatch[category]['tags'] = [414] //Other Other
         break
         case '5': //Support *WONT SEE THIS DUE TO SQL SELECT*
-        membersInBatch[category]['tags'] = [414] //Other Other        
+        membersInBatch[category]['tags'] = [414] //Other Other
         break
         case '6': //Training
         membersInBatch[category]['tags'] = [338] //Training Other
